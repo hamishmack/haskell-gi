@@ -226,21 +226,22 @@ buildFieldAttributes n field
     | otherwise = group $ do
 
   hType <- tshow <$> haskellType (fieldType field)
-  if ("Private" `T.isSuffixOf` hType ||
-     not (fieldVisible field))
+  if "Private" `T.isSuffixOf` hType ||
+     not (fieldVisible field)
   then return Nothing
   else do
      isPtr <- typeIsPtr (fieldType field)
 
-     buildFieldReader n field
-     buildFieldWriter n field
-     when isPtr $
-          buildFieldClear n field
+     submodule "Internal" $ do
+        buildFieldReader n field
+        buildFieldWriter n field
+        when isPtr $
+             buildFieldClear n field
 
-     exportProperty (fName field) (fieldGetter n field)
-     exportProperty (fName field) (fieldSetter n field)
-     when isPtr $
-          exportProperty (fName field) (fieldClear n field)
+        exportProperty (fName field) (fieldGetter n field)
+        exportProperty (fName field) (fieldSetter n field)
+        when isPtr $
+             exportProperty (fName field) (fieldClear n field)
 
      Just <$> genAttrInfo n field
 
@@ -321,7 +322,7 @@ prefixedFunPtrImport prefix symbol prototype = group $ do
 -- | Generate the typeclass with information for how to
 -- allocate/deallocate unboxed structs and unions.
 genWrappedPtr :: Name -> AllocationInfo -> Int -> CodeGen ()
-genWrappedPtr n info size = group $ do
+genWrappedPtr n info size = submodule "Internal" $ group $ do
   name' <- upperName n
 
   let prefix = \op -> "_" <> name' <> "_" <> op <> "_"

@@ -234,18 +234,24 @@ genOneProperty owner prop = do
        notImplementedError $ "Property is not readable, writable, or constructible: "
                                <> tshow pName
 
-  group $ do
-    line $ "-- VVV Prop \"" <> propName prop <> "\""
-    line $ "   -- Type: " <> tshow (propType prop)
-    line $ "   -- Flags: " <> tshow (propFlags prop)
-    line $ "   -- Nullable: " <> tshow (propReadNullable prop,
-                                        propWriteNullable prop)
+  submodule "Internal" $ do
+    group $ do
+      line $ "-- VVV Prop \"" <> propName prop <> "\""
+      line $ "   -- Type: " <> tshow (propType prop)
+      line $ "   -- Flags: " <> tshow (propFlags prop)
+      line $ "   -- Nullable: " <> tshow (propReadNullable prop,
+                                          propWriteNullable prop)
 
-  when readable $ genPropertyGetter owner pName prop
-  when writable $ genPropertySetter owner pName prop
-  when (writable || constructOnly) $ genPropertyConstructor pName prop
-  when (isNullable && writable && propWriteNullable prop /= Just False) $
-       genPropertyClear owner pName prop
+    when readable $ genPropertyGetter owner pName prop
+    when writable $ genPropertySetter owner pName prop
+    when (writable || constructOnly) $ genPropertyConstructor pName prop
+    when (isNullable && writable && propWriteNullable prop /= Just False) $
+         genPropertyClear owner pName prop
+
+    when (getter /= "undefined") (exportProperty cName getter)
+    when (setter /= "undefined") (exportProperty cName setter)
+    when (constructor /= "undefined") (exportProperty cName constructor)
+    when (clear /= "undefined") (exportProperty cName clear)
 
   outType <- if not readable
              then return "()"
@@ -282,10 +288,6 @@ genOneProperty owner prop = do
                          else [])
     it <- infoType owner prop
     exportProperty cName it
-    when (getter /= "undefined") (exportProperty cName getter)
-    when (setter /= "undefined") (exportProperty cName setter)
-    when (constructor /= "undefined") (exportProperty cName constructor)
-    when (clear /= "undefined") (exportProperty cName clear)
     bline $ "data " <> it
     line $ "instance AttrInfo " <> it <> " where"
     indent $ do

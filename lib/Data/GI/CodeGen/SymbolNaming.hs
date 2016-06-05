@@ -64,7 +64,7 @@ qualify = qualifyWithSuffix "."
 -- | Save a bit of typing for optional arguments in the case that we
 -- want to pass Nothing.
 noName :: Text -> CodeGen ()
-noName name' = group $ do
+noName name' = submodule "Internal" . group $ do
                  line $ "no" <> name' <> " :: Maybe " <> name'
                  line $ "no" <> name' <> " = Nothing"
                  exportDecl ("no" <> name')

@@ -285,7 +285,7 @@ signalHaskellName sn = let (w:ws) = T.split (== '-') sn
                        in w <> T.concat (map ucFirst ws)
 
 genSignal :: Signal -> Name -> ExcCodeGen ()
-genSignal (Signal { sigName = sn, sigCallable = cb }) on = do
+genSignal (Signal { sigName = sn, sigCallable = cb }) on = submodule "Internal" $ do
   on' <- upperName on
 
   line $ "-- signal " <> on' <> "::" <> sn

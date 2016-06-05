@@ -52,7 +52,7 @@ genFunction n (Function symbol throws fnMovedTo callable) =
                         (genCallable n symbol callable throws)
 
 genBoxedObject :: Name -> Text -> CodeGen ()
-genBoxedObject n typeInit = do
+genBoxedObject n typeInit = submodule "Internal" $ do
   name' <- upperName n
 
   group $ do
@@ -203,9 +203,9 @@ genStruct n s = unless (ignoreStruct n s) $ do
    name' <- upperName n
 
    submodule "Structs" $ submodule name' $ do
-      let decl = line $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
-      hsBoot decl
-      decl
+      submodule "Internal" $ do
+        bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
+        exportDecl (name' <> ("(..)"))
 
       addModuleDocumentation (structDocumentation s)
 
@@ -213,7 +213,6 @@ genStruct n s = unless (ignoreStruct n s) $ do
       then genBoxedObject n (fromJust $ structTypeInit s)
       else genWrappedPtr n (structAllocationInfo s) (structSize s)
 
-      exportDecl (name' <> ("(..)"))
 
       -- Generate a builder for a structure filled with zeroes.
       genZeroStruct n s
@@ -245,15 +244,13 @@ genUnion n u = do
   name' <- upperName n
 
   submodule "Unions" $ submodule name' $ do
-     let decl = line $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
-     hsBoot decl
-     decl
+     submodule "Internal" $ do
+        bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
+        exportDecl (name' <> "(..)")
 
      if unionIsBoxed u
      then genBoxedObject n (fromJust $ unionTypeInit u)
      else genWrappedPtr n (unionAllocationInfo u) (unionSize u)
-
-     exportDecl (name' <> "(..)")
 
      -- Generate a builder for a structure filled with zeroes.
      genZeroUnion n u
@@ -342,8 +339,6 @@ genMethod cn m@(Method {
                 }) = do
     name' <- upperName cn
     returnsGObject <- maybe (return False) isGObject (returnType c)
-    line $ "-- method " <> name' <> "::" <> name mn
-    line $ "-- method type : " <> tshow t
     let -- Mangle the name to namespace it to the class.
         mn' = mn { name = name cn <> "_" <> name mn }
     let c'  = if Constructor == t
@@ -352,25 +347,25 @@ genMethod cn m@(Method {
         c'' = if OrdinaryMethod == t
               then fixMethodArgs cn c'
               else c'
-    genCallable mn' sym c'' throws
 
+    submodule "Internal" $ do
+        line $ "-- method " <> name' <> "::" <> name mn
+        line $ "-- method type : " <> tshow t
+        genCallable mn' sym c'' throws
+
+    line $ "-- method " <> name' <> "::" <> name mn
+    line $ "-- method type : " <> tshow t
     genMethodInfo cn (m {methodCallable = c''})
 
 -- Type casting with type checking
 genGObjectCasts :: Bool -> Name -> Text -> [Name] -> CodeGen ()
-genGObjectCasts isIU n cn_ parents = do
+genGObjectCasts isIU n cn_ parents = submodule "Internal" $ do
   name' <- upperName n
   qualifiedParents <- traverse upperName parents
 
   group $ do
     line $ "foreign import ccall \"" <> cn_ <> "\""
     indent $ line $ "c_" <> cn_ <> " :: IO GType"
-
-  group $ do
-    let parentObjectsType = name' <> "ParentTypes"
-    line $ "type instance ParentTypes " <> name' <> " = " <> parentObjectsType
-    line $ "type " <> parentObjectsType <> " = '[" <>
-         T.intercalate ", " qualifiedParents <> "]"
 
   group $ do
     bline $ "instance GObject " <> name' <> " where"
@@ -380,10 +375,10 @@ genGObjectCasts isIU n cn_ parents = do
 
   let className = classConstraint name'
   group $ do
-    exportDecl className
+    exportDecl (className <> "(..)")
     bline $ "class GObject o => " <> className <> " o"
-    bline $ "instance (GObject o, IsDescendantOf " <> name' <> " o) => "
-             <> className <> " o"
+    forM_ (filter (/="Object") qualifiedParents) $ \parent ->
+      line $ "instance " <> classConstraint parent <> " " <> name'
 
   -- Safe downcasting.
   group $ do
@@ -406,8 +401,9 @@ genObject n o = do
                 "\" does not descend from GObject, it will be ignored."
   else submodule "Objects" $ submodule name' $
        do
-         bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
-         exportDecl (name' <> "(..)")
+         submodule "Internal" $ do
+             bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
+             exportDecl (name' <> "(..)")
 
          -- Type safe casting to parent objects, and implemented interfaces.
          isIU <- isInitiallyUnowned t
@@ -443,10 +439,11 @@ genInterface n iface = do
   name' <- upperName n
 
   submodule "Interfaces" $ submodule name' $ do
-     line $ "-- interface " <> name' <> " "
-     line $ deprecatedPragma name' $ ifDeprecated iface
-     bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
-     exportDecl (name' <> "(..)")
+     submodule "Internal" $ do
+       line $ "-- interface " <> name' <> " "
+       line $ deprecatedPragma name' $ ifDeprecated iface
+       bline $ "newtype " <> name' <> " = " <> name' <> " (ForeignPtr " <> name' <> ")"
+       exportDecl (name' <> "(..)")
 
      noName name'
 
@@ -474,12 +471,8 @@ genInterface n iface = do
 
      else group $ do
        let cls = classConstraint name'
-       exportDecl cls
+       exportDecl (cls <> "(..)")
        bline $ "class ForeignPtrNewtype a => " <> cls <> " a"
-       bline $ "instance (ForeignPtrNewtype o, IsDescendantOf " <> name' <> " o) => " <> cls <> " o"
-       let parentObjectsType = name' <> "ParentTypes"
-       line $ "type instance ParentTypes " <> name' <> " = " <> parentObjectsType
-       line $ "type " <> parentObjectsType <> " = '[]"
 
      -- Methods
      forM_ (ifMethods iface) $ \f -> do

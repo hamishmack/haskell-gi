@@ -282,14 +282,16 @@ addSubmodule modName submodule current = current { submodules = M.insertWith mer
 
 -- | Run the given CodeGen in order to generate a submodule of the
 -- current module.
-submodule :: Text -> BaseCodeGen e () -> BaseCodeGen e ()
+submodule :: Text -> BaseCodeGen e a -> BaseCodeGen e a
 submodule modName cg = do
   cfg <- ask
   oldInfo <- get
   let info = emptyModule (moduleName oldInfo ++ [modName])
   liftIO (runCodeGen cg cfg info) >>= \case
          Left e -> throwError e
-         Right (_, smInfo) -> modify' (addSubmodule modName smInfo)
+         Right (a, smInfo) -> do
+            modify' (addSubmodule modName smInfo)
+            return a
 
 -- | Try running the given `action`, and if it fails run `fallback`
 -- instead.
