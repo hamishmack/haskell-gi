@@ -26,13 +26,9 @@ import Data.GI.CodeGen.Constant (genConstant)
 import Data.GI.CodeGen.Code
 import Data.GI.CodeGen.Fixups (dropMovedItems, guessPropertyNullability)
 import Data.GI.CodeGen.GObject
-import Data.GI.CodeGen.Inheritance (instanceTree, fullObjectMethodList,
-                       fullInterfaceMethodList)
-import Data.GI.CodeGen.Properties (genInterfaceProperties, genObjectProperties,
-                      genNamespacedPropLabels)
-import Data.GI.CodeGen.OverloadedSignals (genInterfaceSignals, genObjectSignals)
-import Data.GI.CodeGen.OverloadedMethods (genMethodList, genMethodInfo,
-                             genUnsupportedMethodInfo)
+import Data.GI.CodeGen.Inheritance (instanceTree)
+import Data.GI.CodeGen.Properties (genInterfaceProperties, genObjectProperties)
+import Data.GI.CodeGen.OverloadedMethods (genUnsupportedMethodInfo)
 import Data.GI.CodeGen.Signal (genSignal, genCallback)
 import Data.GI.CodeGen.Struct (genStructOrUnionFields, extractCallbacksInStruct,
                   fixAPIStructs, ignoreStruct, genZeroStruct, genZeroUnion,
@@ -232,8 +228,7 @@ genStruct n s = unless (ignoreStruct n s) $ do
                (genMethod n f >> return (Just (n, f)))
        else return Nothing
 
-   -- Overloaded methods
-   genMethodList n (catMaybes methods)
+   return ()
 
 -- | Generated wrapper for unions.
 genUnion :: Name -> Union -> CodeGen ()
@@ -271,8 +266,7 @@ genUnion n u = do
                 (genMethod n f >> return (Just (n, f)))
       else return Nothing
 
-  -- Overloaded methods
-  genMethodList n (catMaybes methods)
+  return ()
 
 -- Add the implicit object argument to methods of an object.  Since we
 -- are prepending an argument we need to adjust the offset of the
@@ -349,8 +343,6 @@ genMethod cn m@(Method {
               else c'
     genCallable mn' sym c'' throws
 
-    genMethodInfo cn (m {methodCallable = c''})
-
 -- Type casting with type checking
 genGObjectCasts :: Bool -> Name -> Text -> [Name] -> CodeGen ()
 genGObjectCasts isIU n cn_ parents = do
@@ -405,8 +397,6 @@ genObject n o = do
 
     noName name'
 
-    fullObjectMethodList n o >>= genMethodList n
-
     forM_ (objSignals o) $ \s ->
      handleCGExc
      (line . (T.concat ["-- XXX Could not generate signal ", name', "::"
@@ -415,8 +405,6 @@ genObject n o = do
      (genSignal s n)
 
     genObjectProperties n o
-    genNamespacedPropLabels n (objProperties o) (objMethods o)
-    genObjectSignals n o
 
     -- Methods
     forM_ (objMethods o) $ \f -> do
@@ -438,8 +426,6 @@ genInterface n iface = do
 
   noName name'
 
-  fullInterfaceMethodList n iface >>= genMethodList n
-
   forM_ (ifSignals iface) $ \s -> handleCGExc
        (line . (T.concat ["-- XXX Could not generate signal ", name', "::"
                        , sigName s
@@ -447,8 +433,6 @@ genInterface n iface = do
        (genSignal s n)
 
   genInterfaceProperties n iface
-  genNamespacedPropLabels n (ifProperties iface) (ifMethods iface)
-  genInterfaceSignals n iface
 
   isGO <- apiIsGObject n (APIInterface iface)
   if isGO
@@ -462,7 +446,7 @@ genInterface n iface = do
 
   else group $ do
     let cls = classConstraint name'
-    exportDecl cls
+    exportDecl (cls <> "(..)")
     bline $ "class ForeignPtrNewtype a => " <> cls <> " a"
     line $ "instance " <> cls <> " " <> name'
 

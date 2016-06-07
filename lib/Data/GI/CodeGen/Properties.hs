@@ -244,61 +244,10 @@ genOneProperty owner prop = do
   when (writable || constructOnly) $ genPropertyConstructor owner pName prop
   when (isNullable && writable && propWriteNullable prop /= Just False) $
        genPropertyClear owner pName prop
-
-  outType <- if not readable
-             then return "()"
-             else do
-               sOutType <- if isNullable && propReadNullable prop /= Just False
-                           then tshow . maybeT <$> haskellType (propType prop)
-                           else tshow <$> haskellType (propType prop)
-               return $ if T.any (== ' ') sOutType
-                        then parenthesize sOutType
-                        else sOutType
-
-  -- Polymorphic _label style lens
-  group $ do
-    inIsGO <- isGObject (propType prop)
-    hInType <- tshow <$> haskellType (propType prop)
-    let inConstraint = if writable || constructOnly
-                       then if inIsGO
-                            then classConstraint hInType
-                            else "(~) " <> if T.any (== ' ') hInType
-                                           then parenthesize hInType
-                                           else hInType
-                       else "(~) ()"
-        allowedOps = (if writable
-                      then ["'AttrSet", "'AttrConstruct"]
-                      else [])
-                     <> (if constructOnly
-                         then ["'AttrConstruct"]
-                         else [])
-                     <> (if readable
-                         then ["'AttrGet"]
-                         else [])
-                     <> (if isNullable && propWriteNullable prop /= Just False
-                         then ["'AttrClear"]
-                         else [])
-    it <- infoType owner prop
-    exportProperty cName it
-    when (getter /= "undefined") (exportProperty cName getter)
-    when (setter /= "undefined") (exportProperty cName setter)
-    when (constructor /= "undefined") (exportProperty cName constructor)
-    when (clear /= "undefined") (exportProperty cName clear)
-    bline $ "data " <> it
-    line $ "instance AttrInfo " <> it <> " where"
-    indent $ do
-            line $ "type AttrAllowedOps " <> it
-                     <> " = '[ " <> T.intercalate ", " allowedOps <> "]"
-            line $ "type AttrSetTypeConstraint " <> it
-                     <> " = " <> inConstraint
-            line $ "type AttrBaseTypeConstraint " <> it
-                     <> " = " <> classConstraint name
-            line $ "type AttrGetType " <> it <> " = " <> outType
-            line $ "type AttrLabel " <> it <> " = \"" <> propName prop <> "\""
-            line $ "attrGet _ = " <> getter
-            line $ "attrSet _ = " <> setter
-            line $ "attrConstruct _ = " <> constructor
-            line $ "attrClear _ = " <> clear
+  when (getter /= "undefined") (exportProperty cName getter)
+  when (setter /= "undefined") (exportProperty cName setter)
+  when (constructor /= "undefined") (exportProperty cName constructor)
+  when (clear /= "undefined") (exportProperty cName clear)
 
 -- | Generate a placeholder property for those cases in which code
 -- generation failed.
@@ -329,15 +278,8 @@ genProperties n ownedProps allProps = do
       handleCGExc (\err -> do
                      line $ "-- XXX Generation of property \""
                               <> propName prop <> "\" of object \""
-                              <> name <> "\" failed: " <> describeCGError err
-                     genPlaceholderProperty n prop)
+                              <> name <> "\" failed: " <> describeCGError err)
                   (genOneProperty n prop)
-
-  group $ do
-    let propListType = name <> "AttributeList"
-    line $ "type instance AttributeList " <> name <> " = " <> propListType
-    line $ "type " <> propListType <> " = ('[ "
-             <> T.intercalate ", " allProps <> "] :: [(Symbol, *)])"
 
 -- | Generate gtk2hs compatible attribute labels (to ease
 -- porting). These are namespaced labels, for examples

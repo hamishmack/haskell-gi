@@ -95,13 +95,4 @@ genMethodInfo n m =
 -- | Generate a method info that is not actually callable, but rather
 -- gives a type error when trying to use it.
 genUnsupportedMethodInfo :: Name -> Method -> CodeGen ()
-genUnsupportedMethodInfo n m = do
-  infoName <- methodInfoName n m
-  line $ "-- XXX: Dummy instance, since code generation failed.\n"
-           <> "-- Please file a bug at http://github.com/haskell-gi/haskell-gi."
-  bline $ "data " <> infoName
-  line $ "instance (p ~ (), o ~ MethodResolutionFailed \""
-           <> lowerName (methodName m) <> "\" " <> name n
-           <> ") => MethodInfo " <> infoName <> " o p where"
-  indent $ line $ "overloadedMethod _ = undefined"
-  exportMethod "Unsupported methods" infoName
+genUnsupportedMethodInfo n m = return ()
