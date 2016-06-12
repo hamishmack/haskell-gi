@@ -11,9 +11,9 @@ module Data.GI.CodeGen.Struct ( genStructOrUnionFields
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
 #endif
-import Control.Monad (forM, when)
+import Control.Monad (forM_, unless, when)
 
-import Data.Maybe (mapMaybe, isJust, catMaybes)
+import Data.Maybe (mapMaybe, isJust)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -221,10 +221,10 @@ genAttrInfo owner field = do
 
   return $ "'(\"" <> (lcFirst  . fName) field <> "\", " <> it <> ")"
 
-buildFieldAttributes :: Name -> Field -> ExcCodeGen (Maybe Text)
+buildFieldAttributes :: Name -> Field -> ExcCodeGen ()
 buildFieldAttributes n field
-    | not (fieldVisible field) = return Nothing
-    | privateType (fieldType field) = return Nothing
+    | not (fieldVisible field) = return ()
+    | privateType (fieldType field) = return ()
     | otherwise = group $ do
      isPtr <- typeIsPtr (fieldType field)
 
@@ -238,7 +238,6 @@ buildFieldAttributes n field
      when isPtr $
           exportProperty (fName field) (fieldClear n field)
 
-     Just <$> genAttrInfo n field
     where privateType :: Type -> Bool
           privateType (TInterface _ n) = "Private" `T.isSuffixOf` n
           privateType _ = False
@@ -247,20 +246,12 @@ genStructOrUnionFields :: Name -> [Field] -> CodeGen ()
 genStructOrUnionFields n fields = do
   let name' = upperName n
 
-  attrs <- forM fields $ \field ->
+  forM_ fields $ \field ->
       handleCGExc (\e -> line ("-- XXX Skipped attribute for \"" <> name' <>
                                ":" <> fieldName field <> "\" :: " <>
                                describeCGError e) >>
-                   return Nothing)
+                   return ())
                   (buildFieldAttributes n field)
-
-  blank
-
-  group $ do
-    let attrListName = name' <> "AttributeList"
-    line $ "type instance AttributeList " <> name' <> " = " <> attrListName
-    line $ "type " <> attrListName <> " = ('[ " <>
-         T.intercalate ", " (catMaybes attrs) <> "] :: [(Symbol, *)])"
 
 -- | Generate a constructor for a zero-filled struct/union of the given
 -- type, using the boxed (or GLib, for unboxed types) allocator.
